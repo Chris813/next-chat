@@ -1,18 +1,29 @@
 //客户端组件
 "use client";
+import axios from "axios";
 import { Button } from "@/app/components/Button";
 import { Input } from "@/app/components/inputs/Input";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FieldValues, SubmitHandler, useForm } from "react-hook-form";
 import { AuthSocialButton } from "./AuthSocialButton";
 import { BsGithub } from "react-icons/bs";
 import { FcGoogle } from "react-icons/fc";
+import { toast } from "react-hot-toast";
+import { signIn, useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 type Variant = "LOGIN" | "REGISTER";
 
 const AuthForm = () => {
+  const session = useSession();
+  const router = useRouter();
   const [variant, setVariant] = useState<Variant>("LOGIN");
+  //true为提交注册/登录
   const [isLoading, setIsLoading] = useState(false);
-
+  useEffect(() => {
+    if (session?.status === "authenticated") {
+      router.push("/users");
+    }
+  }, [session?.status]);
   const toggleVariant = useCallback(() => {
     setVariant((prev) => (prev === "LOGIN" ? "REGISTER" : "LOGIN"));
   }, [variant]);
@@ -23,7 +34,7 @@ const AuthForm = () => {
     formState: { errors },
   } = useForm<FieldValues>({
     defaultValues: {
-      username: "",
+      name: "",
       password: "",
       email: "",
     },
@@ -32,15 +43,50 @@ const AuthForm = () => {
     setIsLoading(true);
     if (variant === "REGISTER") {
       //TODO: register
+      axios
+        .post("/api/register", data)
+        .then(() => {
+          signIn("credentials", { ...data, redirect: false });
+        })
+        .catch(() => toast.error("注册失败"))
+        .finally(() => {
+          setIsLoading(false);
+        });
     }
     if (variant === "LOGIN") {
       //TODO: login
+      signIn("credentials", { ...data, redirect: false })
+        .then((callback) => {
+          console.log(callback);
+          if (callback?.error) {
+            toast.error("Invalid credentials");
+          }
+          if (callback?.ok && !callback?.error) {
+            toast.success("登录成功");
+          }
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
     }
-    console.log(data);
   };
   const socialAction = (action: string) => {
     setIsLoading(true);
     //TODO: social login
+    signIn(action, { redirect: false })
+      .then((callback) => {
+        console.log(callback);
+        if (callback?.error) {
+          toast.error("登录失败");
+        }
+        if (callback?.ok && !callback?.error) {
+          toast.success("登录成功");
+          router.push("/users");
+        }
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   };
   return (
     <div className='sm:mx-auto sm:w-full sm:max-w-md mt-8'>
@@ -52,7 +98,7 @@ const AuthForm = () => {
         <form className='space-y-6' onSubmit={handleSubmit(onSubmit)}>
           {variant === "REGISTER" && (
             <Input
-              id='username'
+              id='name'
               label='用户名'
               register={register}
               errors={errors}
